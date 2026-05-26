@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Room Control Webhook</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#101217; --panel:#1b1f28; --panel2:#242a35; --border:#303744;
+      --text:#e5e7eb; --muted:#8b95a7; --accent:#3b82f6; --accent2:#2563eb;
+      --good:#22c55e; --bad:#ef4444; --radius:8px;
+    }
+    html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font: 13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; }
+
+    /* ── App shell ─────────────────────────────────────────────────────────── */
+    .app  { display: flex; flex-direction: column; height: 100%; }
+
+    /* ── Header ────────────────────────────────────────────────────────────── */
+    header { flex-shrink: 0; padding: 7px 12px; border-bottom: 1px solid var(--border); background: var(--panel); display: flex; gap: 10px; align-items: center; }
+    h1 { font-size: 13px; white-space: nowrap; font-weight: 700; margin-right: 4px; }
+    #dot { width: 8px; height: 8px; border-radius: 99px; background: var(--muted); flex-shrink: 0; }
+    #dot.ok { background: var(--good); } #dot.err { background: var(--bad); }
+    .hrow { display: flex; gap: 6px; align-items: center; flex: 1; }
+    .hrow input { padding: 4px 7px; }
+    #hip  { width: 140px; }
+    #hport { width: 60px; }
+    #hpw  { width: 90px; }
+    #status { color: var(--muted); font-size: 11px; white-space: nowrap; }
+
+    /* ── Body (sidebar + main) ─────────────────────────────────────────────── */
+    .body { display: flex; flex: 1; min-height: 0; }
+
+    aside {
+      width: 210px; flex-shrink: 0;
+      background: var(--panel); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden; padding: 8px; gap: 8px;
+    }
+    .aside-box {
+      background: var(--panel2); border-radius: var(--radius); padding: 8px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .aside-box.grow { flex: 1; min-height: 0; overflow: hidden; }
+
+    main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ── Tabs ──────────────────────────────────────────────────────────────── */
+    .tabs { flex-shrink: 0; display: flex; gap: 2px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--border); }
+    .tab  { background: transparent; color: var(--muted); border: none; border-bottom: 2px solid transparent; padding: 7px 12px; font: inherit; font-weight: 600; font-size: 12px; cursor: pointer; }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── Pages ─────────────────────────────────────────────────────────────── */
+    .page { display: none; flex: 1; min-height: 0; overflow-y: auto; padding: 8px; flex-direction: column; gap: 8px; }
+    .page.active { display: flex; }
+
+    /* ── Log ───────────────────────────────────────────────────────────────── */
+    .log { flex-shrink: 0; height: 90px; background: #0b0d12; border-top: 1px solid var(--border); overflow-y: auto; padding: 5px 10px; font: 11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; color: var(--muted); }
+
+    /* ── Cards ─────────────────────────────────────────────────────────────── */
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; }
+    .card.grow { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+    .ctitle { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; margin-bottom: 7px; }
+
+    /* ── Form ──────────────────────────────────────────────────────────────── */
+    label { display: block; color: var(--muted); font-size: 11px; margin: 5px 0 2px; }
+    input, select, textarea {
+      width: 100%; background: var(--panel2); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px; padding: 5px 7px; font: inherit; outline: none;
+    }
+    textarea { font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size: 11px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+
+    /* ── Buttons ───────────────────────────────────────────────────────────── */
+    button { border: none; border-radius: 6px; padding: 5px 10px; font: inherit; font-weight: 600; font-size: 12px; color: #fff; background: var(--accent); cursor: pointer; white-space: nowrap; }
+    button:hover { background: var(--accent2); }
+    button.ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+    button.ghost:hover { background: #303744; }
+    .brow { display: flex; gap: 6px; align-items: flex-end; }
+    .brow > * { flex: 1; }
+
+    /* ── Command grid ──────────────────────────────────────────────────────── */
+    .cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px,1fr)); gap: 5px; overflow-y: auto; flex: 1; align-content: start; }
+    .cmd { background: var(--panel2); color: var(--text); border: 1px solid var(--border); padding: 7px 5px; font-size: 12px; text-align: center; }
+    .cmd:hover { border-color: var(--accent); }
+
+    /* ── Quick commands ────────────────────────────────────────────────────── */
+    .qgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; overflow-y: auto; flex: 1; align-content: start; }
+    .qgrid button { font-size: 11px; padding: 5px 3px; background: var(--panel2); color: var(--text); border: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; }
+    .qgrid button:hover { border-color: var(--accent); background: var(--panel2); }
+
+    /* ── Preset run ────────────────────────────────────────────────────────── */
+    .pgrid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pgrid button { min-width: 110px; }
+    .room-card { margin-bottom: 0; }
+    .room-name { font-weight: 700; font-size: 13px; }
+    .room-meta { color: var(--muted); font-size: 11px; margin-bottom: 6px; }
+
+    /* ── Misc ──────────────────────────────────────────────────────────────── */
+    .ok  { color: var(--good); }
+    .err { color: var(--bad); }
+    .stitle { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+    .hint { color: var(--muted); font-size: 12px; padding: 10px; text-align: center; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Header (connection) ────────────────────────────────────────────── -->
+  <header>
+    <div id="dot"></div>
+    <h1>Room Control</h1>
+    <div class="hrow">
+      <input id="hip"  placeholder="Controller IP" autocomplete="off">
+      <input id="hport" type="number" value="5080">
+      <input id="hpw"  type="password" placeholder="Password">
+      <button onclick="connect()">Connect</button>
+      <button class="ghost" onclick="reloadAll()" title="Reload data">↺</button>
+      <span id="status">Not connected</span>
+    </div>
+  </header>
+
+  <!-- ── Body ──────────────────────────────────────────────────────────── -->
+  <div class="body">
+
+    <!-- Sidebar -->
+    <aside>
+      <div class="aside-box">
+        <div class="stitle">Target Room</div>
+        <select id="room"><option value="">Connect first</option></select>
+        <label>Or type room / ID / all</label>
+        <input id="roomText" placeholder="Living Room, 12, or all">
+      </div>
+      <div class="aside-box grow">
+        <div class="stitle">Quick Commands</div>
+        <div class="qgrid" id="quick"><div class="hint" style="grid-column:1/-1">Connect first</div></div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main>
+      <nav class="tabs">
+        <button class="tab active" onclick="tab('control',this)">Control</button>
+        <button class="tab" onclick="tab('presets',this)">Source Presets</button>
+        <button class="tab" onclick="tab('custom',this)">Custom JSON</button>
+      </nav>
+
+      <!-- Control tab -->
+      <section id="page-control" class="page active">
+        <div class="card">
+          <div class="ctitle">Send Command</div>
+          <div class="brow">
+            <div>
+              <label>Command</label>
+              <input id="command" list="commandList" placeholder="PLAYPAUSE, VOLUME_UP…">
+              <datalist id="commandList"></datalist>
+            </div>
+            <div style="max-width:105px">
+              <label>Action</label>
+              <select id="action"><option>tap</option><option>press</option><option>release</option><option>click</option></select>
+            </div>
+            <div style="max-width:70px;align-self:flex-end">
+              <button onclick="sendCommand()" style="width:100%">Send</button>
+            </div>
+          </div>
+          <label>Params JSON (optional)</label>
+          <textarea id="params" rows="2" placeholder='{"LEVEL":50}'></textarea>
+        </div>
+        <div class="card grow">
+          <div class="ctitle">All Commands</div>
+          <div class="cgrid" id="allCommands"><div class="hint">Connect to load</div></div>
+        </div>
+      </section>
+
+      <!-- Source Presets tab -->
+      <section id="page-presets" class="page">
+        <div id="presetRun"><div class="hint">Connect to load presets — configure them in Composer's driver properties</div></div>
+      </section>
+
+      <!-- Custom JSON tab -->
+      <section id="page-custom" class="page">
+        <div class="card">
+          <div class="ctitle">Custom Request</div>
+          <div class="brow">
+            <div style="max-width:90px"><label>Method</label><select id="customMethod"><option>GET</option><option selected>POST</option></select></div>
+            <div><label>Path</label><input id="customPath" value="/command"></div>
+          </div>
+          <label>Body</label>
+          <textarea id="customBody" rows="4">{"room":12,"command":"PLAYPAUSE"}</textarea>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button onclick="customRequest()">Send</button>
+            <button class="ghost" onclick="formatCustom()">Format</button>
+          </div>
+          <pre id="customResult" style="color:var(--muted);margin-top:8px;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow:auto;max-height:180px"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+const COMMON = ['CONTROL4','ROOM_OFF','VOLUME_UP','VOLUME_DOWN','PAUSE','PLAY','GUIDE','INFO','MENU','BACK','EXIT','UP','DOWN','LEFT','RIGHT','ENTER'];
+let baseUrl = '', headers = {}, rooms = [], commands = [], presets = {};
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+function fmt(s){ return String(s||'').replace(/_/g,' ').toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()); }
+function selectedRoom(){ return $('roomText').value.trim() || $('room').value; }
+function maybeNum(v){ const n=Number(v); return v!==''&&Number.isFinite(n)?n:v; }
+
+function saveLocal(){ localStorage.setItem('rcw',JSON.stringify({ip:$('hip').value,port:$('hport').value,pw:$('hpw').value})); }
+function loadLocal(){ try{ const d=JSON.parse(localStorage.getItem('rcw')||'{}'); if(d.ip)$('hip').value=d.ip; if(d.port)$('hport').value=d.port; if(d.pw)$('hpw').value=d.pw; }catch(e){} }
+
+async function api(method, path, body){
+  const opts={method,headers:{...headers}};
+  if(body!=null){ opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(body); }
+  const t0=Date.now(); let res,text,json;
+  try{ res=await fetch(baseUrl+path,opts); text=await res.text(); try{json=JSON.parse(text);}catch(e){} }
+  catch(e){ log(method,path,'ERR',String(e)); throw e; }
+  log(method,path,res.status,text.slice(0,160),Date.now()-t0);
+  return {status:res.status,text,json};
+}
+
+async function connect(){
+  const ip=$('hip').value.trim(), port=$('hport').value.trim()||'5080', pw=$('hpw').value;
+  if(!ip) return alert('Enter controller IP.');
+  baseUrl=`http://${ip}:${port}`; headers=pw?{'Authorization':`Bearer ${pw}`}:{}; saveLocal(); setStatus('loading');
+  try{ const h=await api('GET','/health'); if(!h.json||!h.json.ok) throw new Error(h.text); setStatus('ok'); await reloadAll(); }
+  catch(e){ setStatus('err'); }
+}
+
+async function reloadAll(){
+  if(!baseUrl) return;
+  const [r,c,p]=await Promise.all([api('GET','/rooms'),api('GET','/commands'),api('GET','/presets')]);
+  if(r.json) populateRooms(r.json);
+  if(c.json) populateCommands(c.json);
+  if(p.json) populatePresets(p.json);
+}
+
+function setStatus(state){
+  $('dot').className=state==='ok'?'ok':state==='err'?'err':'';
+  $('status').textContent=state==='ok'?baseUrl:state==='err'?'Connection failed':'Connecting…';
+}
+
+function populateRooms(data){
+  rooms=(data.rooms||[]).filter(r=>r.enabled||r.allowed||data.allow_unselected_rooms);
+  $('room').innerHTML='<option value="">Pick a room</option>'+
+    rooms.map(r=>`<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('')+
+    '<option value="all">All selected rooms</option>';
+}
+
+function populateCommands(data){
+  const raw=Array.isArray(data.commands)?data.commands:(data.commands&&data.commands.commands)||[];
+  commands=raw.map(c=>typeof c==='string'?{name:c}:c).filter(c=>c.name);
+  const names=commands.map(c=>c.name).sort();
+  $('commandList').innerHTML=names.map(n=>`<option value="${esc(n)}"></option>`).join('');
+  renderGrid('allCommands',names,n=>`<button class="cmd" onclick="quick('${esc(n)}')" title="${esc(n)}">${esc(fmt(n))}</button>`);
+  renderGrid('quick',COMMON.filter(n=>names.includes(n)),n=>`<button onclick="quick('${esc(n)}')" title="${esc(n)}">${esc(fmt(n))}</button>`,'qgrid');
+}
+
+function renderGrid(id,items,template,cls){
+  const el=$(id); if(!items.length){ el.innerHTML='<div class="hint" style="grid-column:1/-1">None loaded</div>'; return; }
+  el.innerHTML=items.map(template).join('');
+  if(cls){ el.className=cls; }
+}
+
+function populatePresets(data){
+  presets=data.presets||{};
+  renderPresetRun();
+}
+
+async function quick(cmd){ $('command').value=cmd; await sendCommand(); }
+
+async function sendCommand(){
+  if(!baseUrl) return alert('Connect first.');
+  const room=selectedRoom(), command=$('command').value.trim(), action=$('action').value;
+  if(!room) return alert('Select or type a room.');
+  if(!command) return alert('Enter a command.');
+  let params={};
+  try{ const v=$('params').value.trim(); if(v) params=JSON.parse(v); }
+  catch(e){ return alert('Params JSON invalid: '+e.message); }
+  await api('POST','/command',{room:maybeNum(room),command,action,params});
+}
+
+function renderPresetRun(){
+  const el=$('presetRun');
+  const configured=rooms.filter(r=>{ const list=presets[String(r.id)]||[]; return list.length>0; });
+  if(!configured.length){
+    el.innerHTML='<div class="hint">No source presets configured — select sources in Composer\'s driver properties panel</div>';
+    return;
+  }
+  el.innerHTML=configured.map(room=>{
+    const list=presets[String(room.id)]||[];
+    const btns=list.map((p,i)=>`<button onclick="runPreset('${esc(room.id)}',${p.index||i+1})">${esc(p.source_name||p.name||'Preset '+(p.index||i+1))}</button>`).join('');
+    return `<div class="card room-card"><div class="room-name">${esc(room.name)}</div><div class="room-meta">Room ${esc(room.id)}</div><div class="pgrid">${btns}</div></div>`;
+  }).join('');
+}
+
+async function runPreset(roomId, idx){
+  await api('POST','/preset',{room:maybeNum(roomId),preset:idx});
+}
+
+async function customRequest(){
+  if(!baseUrl) return alert('Connect first.');
+  const method=$('customMethod').value, path=$('customPath').value||'/';
+  let body=null;
+  if(method==='POST'&&$('customBody').value.trim()){ try{body=JSON.parse($('customBody').value);}catch(e){return alert(e.message);} }
+  const r=await api(method,path,body);
+  $('customResult').textContent=`HTTP ${r.status}\n`+(r.json?JSON.stringify(r.json,null,2):r.text);
+}
+function formatCustom(){ try{$('customBody').value=JSON.stringify(JSON.parse($('customBody').value),null,2);}catch(e){alert(e.message);} }
+
+function tab(name,btn){
+  document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
+  $('page-'+name).classList.add('active'); btn.classList.add('active');
+}
+
+function log(method,path,status,text,ms){
+  const line=document.createElement('div');
+  const good=Number(status)<400;
+  line.innerHTML=`<span class="${good?'ok':'err'}">${esc(status)}</span> ${esc(method)} ${esc(path)}${ms!=null?' '+esc(ms+'ms'):''} ${esc(text||'')}`;
+  $('log').appendChild(line); $('log').scrollTop=$('log').scrollHeight;
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&['hip','hport','hpw'].includes(e.target.id)) connect();
+  if(e.key==='Enter'&&e.target.id==='command') sendCommand();
+});
+loadLocal();
+</script>
+</body>
+</html>

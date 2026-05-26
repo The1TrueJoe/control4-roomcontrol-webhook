@@ -1,0 +1,11 @@
+# OS
+.DS_Store
+
+# Auto-generated — edit files in src/ instead
+driver.lua
+
+# Packaged Driver
+*.c4z
+
+# Local tools (cloned on demand by build.sh)
+tools/
