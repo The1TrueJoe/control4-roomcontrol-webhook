@@ -78,18 +78,3 @@ curl 'http://CONTROLLER_IP:5080/command?room=all&command=ROOM_OFF&password=YOUR_
 
 Open `www/index.html` from the driver package directly in any browser on your PC. Enter the controller IP, port, and password, then browse rooms, send commands, and run source presets. Source presets are configured in Composer under the driver's **Properties** tab.
 
-## Packaging
-
-The GitHub Actions workflow ([`.github/workflows/build.yml`](.github/workflows/build.yml)) builds and releases the `.c4z` automatically using [snap-one/drivers-driverpackager](https://github.com/snap-one/drivers-driverpackager):
-
-- Every push to `main`/`master` or open pull request builds the driver and uploads `room_control_webhook.c4z` as a workflow artifact.
-- Pushing a tag matching `v*` (e.g. `v1.0.0`) additionally creates a GitHub Release with the `.c4z` attached.
-
-To build locally, run:
-
-```bash
-bash build.sh
-```
-
-`build.sh` auto-clones the driverpackager tool on first run (into `tools/`, which is gitignored).
-

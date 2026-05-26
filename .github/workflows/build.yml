@@ -5,6 +5,8 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  release:
+    types: [created]
 
 jobs:
   build:
@@ -44,3 +46,9 @@ jobs:
         with:
           name: room_control_webhook
           path: room_control_webhook.c4z
+
+      - name: Upload to release
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" room_control_webhook.c4z --clobber
