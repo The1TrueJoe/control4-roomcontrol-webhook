@@ -1,0 +1,7 @@
+<Driver type="c4z" name="room_control_webhook_room" squishLua="false">
+  <Items>
+    <Item type="file" name="driver.xml" />
+    <Item type="file" name="driver.lua" />
+    <Item type="dir" name="www" c4zDir="www" recurse="true" />
+  </Items>
+</Driver>

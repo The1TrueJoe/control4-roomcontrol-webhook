@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Room Control Webhook — Root Driver</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #222; background: #f5f5f5; margin: 0; padding: 24px 16px 48px; }
+    main { max-width: 900px; margin: 0 auto; background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 24px; }
+    h1 { font-size: 24px; margin: 0 0 4px; }
+    h2 { font-size: 17px; margin: 28px 0 10px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+    h3 { font-size: 14px; margin: 18px 0 6px; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; }
+    th, td { border: 1px solid #ddd; padding: 7px 9px; text-align: left; vertical-align: top; }
+    th { background: #f0f0f0; }
+    code, pre { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; }
+    code { background: #eee; border-radius: 3px; padding: 1px 4px; }
+    pre { background: #282c34; color: #f8f8f2; padding: 12px; border-radius: 6px; overflow-x: auto; }
+    .note { background: #fff8e1; border-left: 4px solid #f9a825; padding: 10px 12px; margin: 12px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Room Control Webhook</h1>
+  <p>Root HTTP server driver. Add one instance to your Control4 project. It owns the HTTP listener, authentication, client limits, and request routing.</p>
+  <p>See also: <em>Room Control Webhook Room</em> documentation bundled with the room child driver.</p>
+
+  <h2>Setup</h2>
+  <ol>
+    <li>Add <strong>Room Control Webhook</strong> to your project (any location is fine).</li>
+    <li>Add one <strong>Room Control Webhook Room</strong> driver per room you want to control.</li>
+    <li>In Composer's Connections tab, link each room child's <strong>Root Webhook Link</strong> to an available <strong>Room Link 1–16</strong> binding on this driver.</li>
+    <li>Set port, password, and other properties below, then enable the driver.</li>
+  </ol>
+
+  <h2>Properties</h2>
+  <table>
+    <thead><tr><th>Property</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>Enabled</td><td>Start or stop the HTTP listener. Default: On.</td></tr>
+      <tr><td>HTTP Port</td><td>TCP port. Default: <code>5080</code>.</td></tr>
+      <tr><td>Bind Address</td><td>Network interface to bind. <code>!all</code> listens on all interfaces.</td></tr>
+      <tr><td>Password</td><td>Optional shared secret. Empty = no authentication required.</td></tr>
+      <tr><td>Allow Raw Room Commands</td><td>Allow non-catalog room command strings. Leave <strong>Off</strong> unless needed.</td></tr>
+      <tr><td>Allowed Client IPs</td><td>Comma-separated IP allowlist. Empty = any client accepted.</td></tr>
+      <tr><td>Max Concurrent Clients</td><td>Maximum simultaneous HTTP connections. Default: 8.</td></tr>
+      <tr><td>Max Request Bytes</td><td>Maximum request body size. Default: 8192.</td></tr>
+      <tr><td>Debug Mode</td><td>Write verbose messages to the Control4 log.</td></tr>
+      <tr><td>Linked Rooms</td><td>Read-only. Counts and names of linked room children that have registered.</td></tr>
+      <tr><td>Service Status / Endpoint</td><td>Read-only runtime status and listening URL.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Bindings</h2>
+  <table>
+    <thead><tr><th>Binding</th><th>Class</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>Room Link 1–16</td><td><code>ROOM_CONTROL_WEBHOOK</code></td><td>Provider side. Connect each room child's consumer binding here.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Authentication</h2>
+  <p>If a password is set, include it with every request except <code>GET /health</code>:</p>
+  <ul>
+    <li><code>Authorization: Bearer &lt;password&gt;</code></li>
+    <li>HTTP Basic auth — password field must match.</li>
+    <li><code>X-Control4-Password: &lt;password&gt;</code></li>
+    <li><code>X-API-Key: &lt;password&gt;</code></li>
+    <li><code>password</code> or <code>token</code> as a query param, form field, or JSON field.</li>
+  </ul>
+
+  <h2>Endpoints</h2>
+  <table>
+    <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET /health</code></td><td>Unauthenticated. Returns driver version and status.</td></tr>
+      <tr><td><code>GET /rooms</code></td><td>Linked room children with enabled state, presets, and buttons.</td></tr>
+      <tr><td><code>GET /commands</code></td><td>Catalog of available standard room commands.</td></tr>
+      <tr><td><code>GET /presets</code></td><td>Source presets from all linked room children.</td></tr>
+      <tr><td><code>GET /buttons</code></td><td>Custom buttons from all linked room children.</td></tr>
+      <tr><td><code>GET|POST /command</code></td><td>Send a room command.</td></tr>
+      <tr><td><code>GET|POST /preset</code></td><td>Run a source preset by name or index.</td></tr>
+      <tr><td><code>GET|POST /button</code></td><td>Trigger a custom button by name or index.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">Source presets and custom buttons are configured on each linked <em>Room Control Webhook Room</em> driver, not through this HTTP API.</div>
+
+  <h2>Room Targeting</h2>
+  <p>The <code>room</code> parameter accepts a numeric room ID, room name, comma-separated list, or <code>all</code>. If exactly one linked room is enabled, <code>room</code> may be omitted.</p>
+
+  <h2>Examples</h2>
+
+  <h3>Health check</h3>
+  <pre>GET /health</pre>
+
+  <h3>List rooms</h3>
+  <pre>GET /rooms
+Authorization: Bearer mypassword</pre>
+
+  <h3>Room command</h3>
+  <pre>POST /command
+Content-Type: application/json
+Authorization: Bearer mypassword
+
+{ "room": "Living Room", "command": "PLAYPAUSE" }</pre>
+
+  <h3>Run source preset</h3>
+  <pre>GET /preset?room=Living%20Room&amp;preset=Movie
+Authorization: Bearer mypassword</pre>
+
+  <h3>Trigger custom button</h3>
+  <pre>POST /button
+Content-Type: application/json
+Authorization: Bearer mypassword
+
+{ "room": "Living Room", "button": "Party Mode", "action": "tap" }</pre>
+
+  <h3>Command via query string</h3>
+  <pre>GET /command?room=12&amp;command=VOLUME_UP&amp;password=mypassword</pre>
+</main>
+</body>
+</html>
+
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #222; background: #f5f5f5; margin: 0; padding: 24px 16px 48px; }
+    main { max-width: 900px; margin: 0 auto; background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 24px; }
+    h1 { font-size: 24px; margin: 0 0 4px; }
+    h2 { font-size: 17px; margin: 28px 0 10px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+    h3 { font-size: 14px; margin: 18px 0 6px; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; }
+    th, td { border: 1px solid #ddd; padding: 7px 9px; text-align: left; vertical-align: top; }
+    th { background: #f0f0f0; }
+    code, pre { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; }
+    code { background: #eee; border-radius: 3px; padding: 1px 4px; }
+    pre { background: #282c34; color: #f8f8f2; padding: 12px; border-radius: 6px; overflow-x: auto; }
+    .note { background: #fff8e1; border-left: 4px solid #f9a825; padding: 10px 12px; margin: 12px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Room Control Webhook</h1>
+  <p>Root HTTP server driver plus linked per-room child drivers for room commands, source presets, and custom buttons.</p>
+
+  <h2>Architecture</h2>
+  <ul>
+    <li><strong>Room Control Webhook</strong>: add once. It owns the HTTP listener, authentication, client limits, and request routing.</li>
+    <li><strong>Room Control Webhook Room</strong>: add one per room. It owns that room's control enable switch, source presets, and custom buttons.</li>
+    <li>Connect each room child <strong>Root Webhook Link</strong> to an available root <strong>Room Link N</strong>. The custom control connection class is <code>ROOM_CONTROL_WEBHOOK</code>.</li>
+    <li>Custom buttons are exposed as dynamic <code>BUTTON_LINK</code> provider bindings on the room child driver, so they can be connected to normal Control4 actions/programming.</li>
+  </ul>
+
+  <h2>Root Driver Properties</h2>
+  <table>
+    <thead><tr><th>Property</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>Enabled</td><td>Start or stop the HTTP listener.</td></tr>
+      <tr><td>HTTP Port</td><td>TCP port. Default: <code>5080</code>.</td></tr>
+      <tr><td>Bind Address</td><td>Interface to bind. <code>!all</code> listens on all interfaces.</td></tr>
+      <tr><td>Password</td><td>Optional shared secret. Empty disables auth.</td></tr>
+      <tr><td>Linked Rooms</td><td>Read-only status from linked room child registrations.</td></tr>
+      <tr><td>Allow Raw Room Commands</td><td>Allows non-catalog room commands. Leave off unless needed.</td></tr>
+      <tr><td>Allowed Client IPs</td><td>Comma-separated allowlist. Empty allows all clients.</td></tr>
+      <tr><td>Max Concurrent Clients / Max Request Bytes</td><td>HTTP server resource limits.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Room Child Properties</h2>
+  <table>
+    <thead><tr><th>Property</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>Accept Control</td><td>When off, the room stays linked but root routing will not target it.</td></tr>
+      <tr><td>Preset 1-5 Name / Source</td><td>Room-specific source presets. The source device ID is stored and resolved at runtime as Watch or Listen.</td></tr>
+      <tr><td>Button 1-20 Name</td><td>Creates dynamic <code>BUTTON_LINK</code> bindings for custom actions.</td></tr>
+      <tr><td>Root Link Status</td><td>Shows whether this room child registered with the root driver.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Authentication</h2>
+  <p>If a root password is set, send it with any request except <code>/health</code> using one of:</p>
+  <ul>
+    <li><code>Authorization: Bearer &lt;password&gt;</code></li>
+    <li>HTTP Basic auth; password field must match.</li>
+    <li><code>X-Control4-Password: &lt;password&gt;</code></li>
+    <li><code>X-API-Key: &lt;password&gt;</code></li>
+    <li><code>password</code> or <code>token</code> query/form/JSON value.</li>
+  </ul>
+
+  <h2>Endpoints</h2>
+  <table>
+    <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET /health</code></td><td>Unauthenticated health check.</td></tr>
+      <tr><td><code>GET /rooms</code></td><td>Linked room child drivers and enabled state.</td></tr>
+      <tr><td><code>GET /commands</code></td><td>Available standard room commands.</td></tr>
+      <tr><td><code>GET /presets</code></td><td>Presets reported by linked room children plus available room sources.</td></tr>
+      <tr><td><code>GET /buttons</code></td><td>Custom buttons reported by linked room children.</td></tr>
+      <tr><td><code>GET|POST /command</code></td><td>Send a room command.</td></tr>
+      <tr><td><code>GET|POST /preset</code></td><td>Run a room source preset by name or index.</td></tr>
+      <tr><td><code>GET|POST /button</code></td><td>Trigger a room custom button by name or index.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">Preset configuration is no longer saved through the root HTTP API. Configure presets on each linked room child driver.</div>
+
+  <h2>Room Targeting</h2>
+  <p>The <code>room</code> parameter accepts a room ID, room name, comma-separated list, or <code>all</code>. If exactly one linked room is enabled, <code>room</code> may be omitted.</p>
+
+  <h2>Examples</h2>
+  <h3>Health</h3>
+  <pre>GET /health</pre>
+
+  <h3>Room command</h3>
+  <pre>POST /command
+Content-Type: application/json
+Authorization: Bearer mypassword
+
+{ "room": "Living Room", "command": "PLAYPAUSE" }</pre>
+
+  <h3>Run source preset</h3>
+  <pre>GET /preset?room=Living%20Room&amp;preset=Movie</pre>
+
+  <h3>Trigger custom button</h3>
+  <pre>GET /button?room=Living%20Room&amp;button=Party&amp;action=tap</pre>
+</main>
+</body>
+</html>

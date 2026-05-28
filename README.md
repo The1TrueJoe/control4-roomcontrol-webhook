@@ -1,42 +1,52 @@
 # control4-roomcontrol-webhook
 
-Lightweight Control4 DriverWorks driver that exposes a local HTTP service so third-party remotes, scripts, and automation tools can send room-control commands to Director. Button-style actions are handled through the same `/command` endpoint.
+Control4 DriverWorks webhook suite with one root HTTP server driver and one linked per-room child driver.
 
-## Files
+## Packages
 
-- `driver.xml` — Control4 driver definition and Composer properties.
-- `src/` — Lua source modules (concatenated into `driver.lua` at build time).
-- `www/` — Packaged web UI and documentation included in the `.c4z`.
-- `room_control_webhook.c4zproj` — manifest for [snap-one/drivers-driverpackager](https://github.com/snap-one/drivers-driverpackager).
+`build.sh` produces two `.c4z` files:
+
+- `room_control_webhook.c4z` — root driver; owns HTTP server, auth, client limits, and request routing.
+- `room_control_webhook_room.c4z` — room child driver; add one per controllable room and configure that room's presets/custom buttons there.
+
+Root-level `index.html` is local dev/test tooling and is not packaged. Packaged driver documentation lives under `www/`.
 
 ## Setup
 
-1. Build the `.c4z` (see [Packaging](#packaging) below) or download a release artifact.
-2. Copy it to the `Documents\Control4\Drivers` folder on the ComposerPro PC.
-3. In ComposerPro → **System Design**, search for **Room Control Webhook** and drag it into any room.
-4. On the **Properties** tab, set **Control Rooms** and optionally a **Password**.
-5. Use **Preset Config Room** to choose which selected room you are configuring, then set **Preset Source 1** through **Preset Source 5** from the room-specific source dropdowns.
-6. Note the read-only **Endpoint** property — it shows the full base URL once the driver starts.
+1. Build both packages or download the release artifacts.
+2. Copy both `.c4z` files to ComposerPro's driver folder.
+3. Add **Room Control Webhook** once to the project.
+4. Add **Room Control Webhook Room** to each room that should accept webhook control.
+5. In ComposerPro connections, connect each room child driver's **Root Webhook Link** to an available root **Room Link N** control connection.
+6. Configure each room child:
+   - **Accept Control**: turn that room on/off for webhook routing.
+   - **Preset N Name / Source**: room-specific source presets.
+   - **Button N Name**: dynamic `BUTTON_LINK` custom buttons for regular Control4 programming/actions.
+7. On the root driver, set **HTTP Port**, optional **Password**, **Allowed Client IPs**, and other server settings.
+8. Use the root **Refresh Linked Rooms** action if a child was linked before both drivers finished late init.
 
 ## Endpoints
 
-All endpoints return JSON. All except `/health` require authentication when a password is set.
+All endpoints return JSON. All except `/health` require authentication when a root password is set.
 
 | Endpoint | Description |
 |---|---|
 | `GET /health` | Unauthenticated health check |
-| `GET /rooms` | List rooms and which are enabled for control |
-| `GET /commands` | List all available unified commands |
-| `GET /presets` | List saved per-room source presets and available sources |
-| `POST /presets` | Save source presets for a room |
-| `GET\|POST /command` | Send a command (`room`, `command`, optional `action`, optional `params`) |
-| `GET\|POST /preset` | Run a saved source preset by name or index |
+| `GET /rooms` | Linked room child drivers and enabled state |
+| `GET /commands` | Available room-control commands |
+| `GET /presets` | Presets reported by linked room drivers |
+| `GET /buttons` | Custom buttons reported by linked room drivers |
+| `GET\|POST /command` | Send a room command (`room`, `command`, optional `action`, optional `params`) |
+| `GET\|POST /preset` | Run a room source preset by name or index |
+| `GET\|POST /button` | Trigger a room custom button by name or index |
 
-The `room` parameter accepts a numeric ID, a room name, a comma-separated list, or `all`.
+The `room` parameter accepts a numeric room ID, a room name, a comma-separated list, or `all`. If exactly one linked room is enabled, `room` may be omitted.
+
+Preset configuration is intentionally not saved through the root HTTP API anymore; configure presets on the room child driver.
 
 ## Authentication
 
-If **Password** is set, send it using any of these:
+If **Password** is set on the root driver, send it using any of these:
 
 - `Authorization: Bearer <password>`
 - HTTP Basic auth; the password field must match
@@ -50,31 +60,34 @@ If **Password** is set, send it using any of these:
 # Health check
 curl http://CONTROLLER_IP:5080/health
 
-# List rooms
+# List linked rooms
 curl -H 'Authorization: Bearer YOUR_PASSWORD' http://CONTROLLER_IP:5080/rooms
 
-# Send a command
+# Send a standard room command
 curl -X POST http://CONTROLLER_IP:5080/command \
   -H 'Authorization: Bearer YOUR_PASSWORD' \
   -H 'Content-Type: application/json' \
-  -d '{"room": 123, "command": "PLAYPAUSE"}'
+  -d '{"room":123,"command":"PLAYPAUSE"}'
 
-# Hold volume up, then release
-curl 'http://CONTROLLER_IP:5080/command?room=123&command=VOLUME_UP&action=press&password=YOUR_PASSWORD'
-curl 'http://CONTROLLER_IP:5080/command?room=123&command=VOLUME_UP&action=release&password=YOUR_PASSWORD'
+# Run source preset 1 in a linked room
+curl 'http://CONTROLLER_IP:5080/preset?room=123&preset=1&password=YOUR_PASSWORD'
 
-# Save and run a source preset
-curl -X POST http://CONTROLLER_IP:5080/presets \
-  -H 'Authorization: Bearer YOUR_PASSWORD' \
-  -H 'Content-Type: application/json' \
-  -d '{"room":123,"presets":[{"name":"Movie","source":456,"source_type":"watch"}]}'
-curl 'http://CONTROLLER_IP:5080/preset?room=123&preset=Movie&password=YOUR_PASSWORD'
+# Trigger custom room button named Party
+curl 'http://CONTROLLER_IP:5080/button?room=123&button=Party&action=tap&password=YOUR_PASSWORD'
 
-# Turn off all selected rooms
+# Turn off all enabled linked rooms
 curl 'http://CONTROLLER_IP:5080/command?room=all&command=ROOM_OFF&password=YOUR_PASSWORD'
 ```
 
-## Web UI
+## Packaging
 
-Open `www/index.html` from the driver package directly in any browser on your PC. Enter the controller IP, port, and password, then browse rooms, send commands, and run source presets. Source presets are configured in Composer under the driver's **Properties** tab.
+```bash
+./build.sh
+```
 
+The script concatenates:
+
+- `src/*.lua` → `driver.lua`
+- `room_src/*.lua` → `room_driver/driver.lua`
+
+Then it packages both root and room child `.c4z` files with Snap One `driverpackager`.

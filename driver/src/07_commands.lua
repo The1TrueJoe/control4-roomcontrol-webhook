@@ -153,7 +153,7 @@ local function ButtonSupportsAction(buttonId, action)
 end
 
 local function RegisterCommand(name, definition)
-	name = NormalizeCommand(name)
+	name = Normalize(name)
 	if (name == '') then
 		return
 	end
@@ -164,7 +164,7 @@ local function RegisterCommand(name, definition)
 end
 
 local function RegisterDirectCommand(command)
-	command = NormalizeCommand(command)
+	command = Normalize(command)
 	if (command ~= '') then
 		RegisterCommand(command, {kind = 'direct', command = command})
 	end
@@ -183,7 +183,7 @@ local function ResolveCommand(value, action)
 		return ButtonSequence(buttonId, action)
 	end
 
-	local normalized = NormalizeCommand(value)
+	local normalized = Normalize(value)
 	if (normalized == '') then
 		return nil, 'Missing command'
 	end

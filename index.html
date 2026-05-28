@@ -94,7 +94,14 @@
     .room-card { margin-bottom: 0; }
     .room-name { font-weight: 700; font-size: 13px; }
     .room-meta { color: var(--muted); font-size: 11px; margin-bottom: 6px; }
-
+    /* ── Button grid ──────────────────────────────────────────────────────── */
+    .bgrid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .btn-tile { min-width: 95px; font-size: 12px; padding: 6px 8px; background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .btn-tile:hover { border-color: var(--accent); background: #2a3142; }
+    .chip { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 99px; vertical-align: middle; margin-left: 4px; }
+    .chip.on { background: var(--good); color: #000; }
+    .chip.off { background: var(--bad); color: #fff; }
+    .room-disabled .room-name { color: var(--muted); }
     /* ── Misc ──────────────────────────────────────────────────────────────── */
     .ok  { color: var(--good); }
     .err { color: var(--bad); }
@@ -141,6 +148,7 @@
       <nav class="tabs">
         <button class="tab active" onclick="tab('control',this)">Control</button>
         <button class="tab" onclick="tab('presets',this)">Source Presets</button>
+        <button class="tab" onclick="tab('buttons',this)">Buttons</button>
         <button class="tab" onclick="tab('custom',this)">Custom JSON</button>
       </nav>
 
@@ -176,6 +184,18 @@
         <div id="presetRun"><div class="hint">Connect to load presets — configure them in Composer's driver properties</div></div>
       </section>
 
+      <!-- Buttons tab -->
+      <section id="page-buttons" class="page">
+        <div class="card" style="flex-shrink:0">
+          <div class="ctitle">Button Action</div>
+          <div style="max-width:160px">
+            <label>Action on click</label>
+            <select id="btnAction"><option value="tap">tap (push + release)</option><option value="press">press (push only)</option><option value="release">release only</option></select>
+          </div>
+        </div>
+        <div id="buttonRooms"><div class="hint">Connect to load — configure buttons in Composer's driver properties</div></div>
+      </section>
+
       <!-- Custom JSON tab -->
       <section id="page-custom" class="page">
         <div class="card">
@@ -201,7 +221,7 @@
 
 <script>
 const COMMON = ['CONTROL4','ROOM_OFF','VOLUME_UP','VOLUME_DOWN','PAUSE','PLAY','GUIDE','INFO','MENU','BACK','EXIT','UP','DOWN','LEFT','RIGHT','ENTER'];
-let baseUrl = '', headers = {}, rooms = [], commands = [], presets = {};
+let baseUrl = '', headers = {}, rooms = [], commands = [], presets = {}, buttons = {};
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
@@ -232,10 +252,11 @@ async function connect(){
 
 async function reloadAll(){
   if(!baseUrl) return;
-  const [r,c,p]=await Promise.all([api('GET','/rooms'),api('GET','/commands'),api('GET','/presets')]);
+  const [r,c,p,b]=await Promise.all([api('GET','/rooms'),api('GET','/commands'),api('GET','/presets'),api('GET','/buttons')]);
   if(r.json) populateRooms(r.json);
   if(c.json) populateCommands(c.json);
   if(p.json) populatePresets(p.json);
+  if(b.json) populateButtons(b.json);
 }
 
 function setStatus(state){
@@ -244,10 +265,10 @@ function setStatus(state){
 }
 
 function populateRooms(data){
-  rooms=(data.rooms||[]).filter(r=>r.enabled||r.allowed||data.allow_unselected_rooms);
+  rooms=data.rooms||[];
   $('room').innerHTML='<option value="">Pick a room</option>'+
-    rooms.map(r=>`<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('')+
-    '<option value="all">All selected rooms</option>';
+    rooms.map(r=>'<option value="'+esc(r.id)+'"'+(r.enabled?'':' style="color:var(--muted)"')+'>'+esc(r.name)+(r.enabled?'':' (disabled)')+'</option>').join('')+
+    '<option value="all">All enabled rooms</option>';
 }
 
 function populateCommands(data){
@@ -268,6 +289,34 @@ function renderGrid(id,items,template,cls){
 function populatePresets(data){
   presets=data.presets||{};
   renderPresetRun();
+}
+
+function populateButtons(data){
+  buttons=data.buttons||{};
+  renderButtonRooms(data.rooms||rooms);
+}
+
+function renderButtonRooms(roomList){
+  const el=$('buttonRooms');
+  const configured=(roomList||rooms).filter(r=>{ const list=buttons[String(r.id)]||[]; return list.length>0; });
+  if(!configured.length){
+    el.innerHTML='<div class="hint">No buttons configured — set Button Names in Composer driver properties</div>';
+    return;
+  }
+  el.innerHTML=configured.map(function(room){
+    const list=buttons[String(room.id)]||[];
+    const chip=room.enabled?'<span class="chip on">on</span>':'<span class="chip off">off</span>';
+    const tiles=list.map(function(btn){
+      return '<button class="btn-tile" onclick="fireButton(\''+esc(room.id)+'\',\''+esc(btn.name)+'\')">'+esc(btn.name)+'<br><small style="color:var(--muted);font-size:10px">#'+btn.index+'</small></button>';
+    }).join('');
+    return '<div class="card room-card'+(room.enabled?'':' room-disabled')+'"><div class="room-name">'+esc(room.name)+chip+'</div><div class="room-meta">Room '+esc(room.id)+'</div><div class="bgrid" style="margin-top:6px">'+tiles+'</div></div>';
+  }).join('');
+}
+
+async function fireButton(roomId, buttonName){
+  if(!baseUrl) return alert('Connect first.');
+  const action=($('btnAction')||{}).value||'tap';
+  await api('POST','/button',{room:maybeNum(roomId),button:buttonName,action:action});
 }
 
 async function quick(cmd){ $('command').value=cmd; await sendCommand(); }

@@ -7,12 +7,13 @@ local function HelpPayload()
 		version = DRIVER_VERSION,
 		endpoints = {
 			'GET /health',
-			'GET /rooms',
+			'GET /rooms (linked room drivers only)',
 			'GET /commands',
-			'GET /presets (source presets and available room sources)',
-			'POST /presets (save room source presets)',
+			'GET /presets (source presets from linked room drivers)',
+			'GET /buttons (custom buttons from linked room drivers)',
 			'GET|POST /command?room=ROOM_ID&command=VOLUME_UP&action=tap',
 			'GET|POST /preset?room=ROOM_ID&preset=PresetName',
+			'GET|POST /button?room=ROOM_ID&button=ButtonName&action=tap',
 		},
 		auth = {
 			'Authorization: Bearer <password>',
@@ -118,9 +119,9 @@ local function HandleRequest(client, req)
 	elseif (req.path == '/rooms') then
 		Response(client, 200, {
 			ok = true,
-			rooms = GetRooms(true),
+			rooms = LinkedRoomCatalog(),
 			selected = CONTROL_ROOMS,
-			allow_unselected_rooms = ALLOW_UNSELECTED_ROOMS,
+			link_class = ROOT_LINK_CLASS,
 		})
 	elseif (req.path == '/commands') then
 		local catalog = CommandCatalog()
@@ -136,11 +137,16 @@ local function HandleRequest(client, req)
 			local status, payload = HandlePresetSaveRequest(req)
 			Response(client, status, payload)
 		end
+	elseif (req.path == '/buttons') then
+		Response(client, 200, ButtonCatalog())
 	elseif (req.path == '/command') then
 		local status, payload = HandleCommandRequest(req)
 		Response(client, status, payload)
 	elseif (req.path == '/preset') then
 		local status, payload = HandlePresetRunRequest(req)
+		Response(client, status, payload)
+	elseif (req.path == '/button') then
+		local status, payload = HandleButtonRunRequest(req)
 		Response(client, status, payload)
 	else
 		ErrorResponse(client, 404, 'not_found', 'Unknown endpoint: ' .. tostring(req.path))

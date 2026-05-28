@@ -2,10 +2,14 @@
 -- All shared module-level variables are declared here so every subsequent
 -- source file can reference them after concatenation.
 
-local DRIVER_VERSION = '1.0.0'
+local DRIVER_VERSION = '2.0.0'
+local LOG_PREFIX = '[Room Control Webhook] '
 local DEFAULT_PORT = 5080
 local DEFAULT_MAX_CLIENTS = 8
 local DEFAULT_MAX_REQUEST_BYTES = 8192
+local ROOT_LINK_CLASS = 'ROOM_CONTROL_WEBHOOK'
+local ROOT_LINK_BINDING_START = 101
+local ROOT_LINK_BINDING_END = 116
 
 local SERVER = nil
 local RESTART_TIMER = nil
@@ -30,12 +34,14 @@ local ALLOW_RAW_ROOM_COMMANDS = false
 local ALLOWED_CLIENT_IPS = {}
 
 local MAX_PRESETS_PER_ROOM = 5
-local MAX_ROOM_SLOTS = 8
 local ROOM_PRESETS = {}
+local MAX_CUSTOM_BUTTONS = 20
 
--- ROOM_SLOT_ASSIGN[slotIndex] = roomId or nil, set by RefreshRoomSlots().
--- Lets OnPropertyChanged for "Room N Preset P" look up which room owns slot N.
-local ROOM_SLOT_ASSIGN = {}
+-- Linked child room driver registry. The root driver owns the HTTP server;
+-- child drivers connected over ROOT_LINK_CLASS own per-room presets/buttons.
+local ROOM_CHILDREN = {}
+local ROOM_CHILDREN_BY_ROOM = {}
+local LINKED_CHILDREN = {}
 
 -- Populated by BuildCommandIndex() at driver init time.
 local COMMAND_INDEX = {}

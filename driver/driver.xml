@@ -1,0 +1,207 @@
+<devicedata>
+	<copyright>Copyright 2026. All rights reserved.</copyright>
+	<manufacturer>Joseph Telaak</manufacturer>
+	<name>Room Control Webhook</name>
+	<model>Room Control Webhook Root</model>
+	<creator>Joseph Telaak</creator>
+	<created>05/26/2026 00:00</created>
+	<modified>05/28/2026 00:36</modified>
+	<version>4</version>
+	<control>lua_gen</control>
+	<driver>DriverWorks</driver>
+	<minimum_os_version>2.10.0</minimum_os_version>
+	<composer_categories>
+		<category>Utility</category>
+	</composer_categories>
+	<config>
+		<script file="driver.lua"/>
+		<documentation file="www/documentation.html"/>
+		<properties>
+			<property>
+				<name>Driver Version</name>
+				<default/>
+				<type>STRING</type>
+				<readonly>true</readonly>
+			</property>
+			<property>
+				<name>Service Status</name>
+				<default>Stopped</default>
+				<type>STRING</type>
+				<readonly>true</readonly>
+			</property>
+			<property>
+				<name>Endpoint</name>
+				<default/>
+				<type>STRING</type>
+				<readonly>true</readonly>
+			</property>
+			<property>
+				<name>Linked Rooms</name>
+				<default>0 enabled / 0 linked</default>
+				<type>STRING</type>
+				<readonly>true</readonly>
+			</property>
+			<property>
+				<name>Enabled</name>
+				<type>LIST</type>
+				<items>
+					<item>On</item>
+					<item>Off</item>
+				</items>
+				<default>On</default>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>HTTP Port</name>
+				<type>RANGED_INTEGER</type>
+				<minimum>1025</minimum>
+				<maximum>65535</maximum>
+				<default>5080</default>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>Bind Address</name>
+				<type>STRING</type>
+				<default>!all</default>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>Password</name>
+				<type>STRING</type>
+				<default/>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>Allow Raw Room Commands</name>
+				<type>LIST</type>
+				<items>
+					<item>Off</item>
+					<item>On</item>
+				</items>
+				<default>Off</default>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>Allowed Client IPs</name>
+				<type>STRING</type>
+				<default/>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>Max Concurrent Clients</name>
+				<type>RANGED_INTEGER</type>
+				<minimum>1</minimum>
+				<maximum>64</maximum>
+				<default>8</default>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>Max Request Bytes</name>
+				<type>RANGED_INTEGER</type>
+				<minimum>1024</minimum>
+				<maximum>65535</maximum>
+				<default>8192</default>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>Debug Mode</name>
+				<type>LIST</type>
+				<items>
+					<item>Off</item>
+					<item>On</item>
+				</items>
+				<default>Off</default>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>Last Request</name>
+				<default/>
+				<type>STRING</type>
+				<readonly>true</readonly>
+			</property>
+			<property>
+				<name>Last Error</name>
+				<default/>
+				<type>STRING</type>
+				<readonly>true</readonly>
+			</property>
+		</properties>
+		<commands>
+			<command>
+				<name>Restart Server</name>
+				<description>Restart the Room Control Webhook listener on NAME</description>
+			</command>
+			<command>
+				<name>Stop Server</name>
+				<description>Stop the Room Control Webhook listener on NAME</description>
+			</command>
+			<command>
+				<name>Refresh Linked Rooms</name>
+				<description>Refresh linked Room Control Webhook Room drivers on NAME</description>
+			</command>
+			<command>
+				<name>Send Room Command</name>
+				<description>Send PARAM2 to PARAM1 on NAME</description>
+				<params>
+					<param>
+						<name>Room</name>
+						<type>DEVICE_SELECTOR</type>
+						<items>
+							<item>roomdevice.c4i</item>
+						</items>
+					</param>
+					<param>
+						<name>Command</name>
+						<type>CUSTOM_SELECT:GetCommandList</type>
+					</param>
+					<param>
+						<name>Action</name>
+						<type>LIST</type>
+						<items>
+							<item>tap</item>
+							<item>press</item>
+							<item>release</item>
+							<item>click</item>
+						</items>
+					</param>
+				</params>
+			</command>
+		</commands>
+		<actions>
+			<action>
+				<name>Restart Server</name>
+				<command>RESTART_SERVER</command>
+			</action>
+			<action>
+				<name>Stop Server</name>
+				<command>STOP_SERVER</command>
+			</action>
+			<action>
+				<name>Refresh Linked Rooms</name>
+				<command>REFRESH_LINKED_ROOMS</command>
+			</action>
+		</actions>
+	</config>
+	<connections>
+		<connection><id>101</id><facing>6</facing><connectionname>Room Link 1</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>102</id><facing>6</facing><connectionname>Room Link 2</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>103</id><facing>6</facing><connectionname>Room Link 3</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>104</id><facing>6</facing><connectionname>Room Link 4</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>105</id><facing>6</facing><connectionname>Room Link 5</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>106</id><facing>6</facing><connectionname>Room Link 6</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>107</id><facing>6</facing><connectionname>Room Link 7</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>108</id><facing>6</facing><connectionname>Room Link 8</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>109</id><facing>6</facing><connectionname>Room Link 9</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>110</id><facing>6</facing><connectionname>Room Link 10</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>111</id><facing>6</facing><connectionname>Room Link 11</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>112</id><facing>6</facing><connectionname>Room Link 12</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>113</id><facing>6</facing><connectionname>Room Link 13</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>114</id><facing>6</facing><connectionname>Room Link 14</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>115</id><facing>6</facing><connectionname>Room Link 15</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+		<connection><id>116</id><facing>6</facing><connectionname>Room Link 16</connectionname><type>1</type><consumer>False</consumer><audiosource>False</audiosource><videosource>False</videosource><linelevel>False</linelevel><classes><class><classname>ROOM_CONTROL_WEBHOOK</classname></class></classes></connection>
+	</connections>
+	<combo>true</combo>
+	<proxies>
+		<proxy>room_control_webhook</proxy>
+	</proxies>
+</devicedata>

@@ -88,15 +88,6 @@ local function RoomPresetKey(roomId)
 	return tostring(tonumber(roomId) or roomId or '')
 end
 
-local function PresetValue(preset, names)
-	for _, name in ipairs(names) do
-		if (preset[name] ~= nil and preset[name] ~= '') then
-			return preset[name]
-		end
-	end
-	return nil
-end
-
 local function SourceTypeLabel(sourceType)
 	sourceType = string.lower(Trim(sourceType or ''))
 	if (sourceType == 'listen' or sourceType == 'audio') then
@@ -159,76 +150,262 @@ local function RoomSources(roomId)
 	return sources
 end
 
-local function RoomSourceMap(roomId)
-	local byIdAndType = {}
-	local byId = {}
-	for _, source in ipairs(RoomSources(roomId)) do
-		byIdAndType[tostring(source.id) .. ':' .. source.type] = source
-		byId[source.id] = byId[source.id] or source
+local function RefreshLinkedRoomIndex()
+	CONTROL_ROOMS = {}
+	CONTROL_ROOM_SET = {}
+	ROOM_CHILDREN_BY_ROOM = {}
+	ROOM_PRESETS = {}
+
+	for childId, child in pairs(ROOM_CHILDREN or {}) do
+		local roomId = tonumber(child and child.room_id)
+		if (roomId) then
+			child.device_id = tonumber(child.device_id) or tonumber(childId)
+			ROOM_CHILDREN_BY_ROOM[roomId] = child
+			if (child.enabled) then
+				CONTROL_ROOM_SET[roomId] = true
+				table.insert(CONTROL_ROOMS, roomId)
+				ROOM_PRESETS[RoomPresetKey(roomId)] = child.presets or {}
+			end
+		end
 	end
-	return byIdAndType, byId
+
+	table.sort(CONTROL_ROOMS)
+	ROOM_CACHE = nil
 end
 
-local function NormalizeSourcePreset(preset, index, roomId)
-	if (type(preset) ~= 'table') then
-		return nil, 'Preset must be an object'
+local function SortedLinkedRooms()
+	local rooms = {}
+	for childId, child in pairs(ROOM_CHILDREN or {}) do
+		local roomId = tonumber(child and child.room_id)
+		if (roomId) then
+			table.insert(rooms, {
+				id = roomId,
+				name = child.room_name or GetRoomName(roomId),
+				enabled = child.enabled == true,
+				child_device = tonumber(child.device_id) or tonumber(childId),
+				child_name = child.child_name or ('Room Control Room ' .. tostring(childId)),
+				binding_id = tonumber(child.binding_id),
+				presets = child.presets or {},
+				buttons = child.buttons or {},
+			})
+		end
 	end
-
-	local name = Trim(preset.name or preset.label or preset.title or '')
-	local source = tonumber(PresetValue(preset, {'source', 'source_id', 'sourceId', 'device', 'deviceid', 'device_id', 'deviceId'}))
-	local sourceType = SourceTypeLabel(PresetValue(preset, {'source_type', 'sourceType', 'type', 'mode'}))
-	local media = tonumber(PresetValue(preset, {'media', 'media_id', 'mediaId', 'mediaid'}))
-
-	if (name == '') then
-		name = 'Preset ' .. tostring(index)
-	end
-	if (not source) then
-		return nil, 'Source device ID is required'
-	end
-
-	local byIdAndType, byId = RoomSourceMap(roomId)
-	local matched = byIdAndType[tostring(source) .. ':' .. sourceType] or byId[source]
-	if (matched) then
-		sourceType = matched.type
-	end
-
-	return {
-		name = name,
-		source = source,
-		source_type = sourceType,
-		source_name = (matched and matched.name) or GetRoomName(source),
-		media = media,
-	}, nil
+	table.sort(rooms, function(a, b)
+		return string.lower(tostring(a.name)) < string.lower(tostring(b.name))
+	end)
+	return rooms
 end
 
-local function SaveRoomSourcePresets(roomId, presets)
-	roomId = tonumber(roomId)
+local function UpdateLinkedRoomsStatus()
+	local rooms = SortedLinkedRooms()
+	local enabledCount = 0
+	local labels = {}
+	for _, room in ipairs(rooms) do
+		if (room.enabled) then
+			enabledCount = enabledCount + 1
+		end
+		table.insert(labels, room.name .. (room.enabled and '' or ' (disabled)'))
+	end
+
+	local status = tostring(enabledCount) .. ' enabled / ' .. tostring(#rooms) .. ' linked'
+	if (#labels > 0) then
+		status = status .. ': ' .. table.concat(labels, ', ')
+	end
+	UpdateDriverProperty('Linked Rooms', status)
+end
+
+local function RegisterLinkedRoom(params)
+	params = params or {}
+	local childId = tonumber(params.DEVICE_ID or params.device_id or params.ChildDeviceID or params.child_device or params.CHILD_ID or params.idDevice or params.ID_DEVICE)
+	local roomId = tonumber(params.ROOM_ID or params.room_id or params.RoomID or params.room)
+	if (not childId) then
+		return false, 'Missing child device ID'
+	end
 	if (not roomId) then
-		return false, 'Room ID is required'
-	end
-	if (not IsRoomAllowed(roomId)) then
-		return false, 'Room is not enabled for webhook control: ' .. tostring(roomId)
-	end
-	if (type(presets) ~= 'table') then
-		return false, 'Presets must be an array'
+		return false, 'Missing room ID from child ' .. tostring(childId)
 	end
 
-	local clean = {}
-	for index, preset in ipairs(presets) do
-		if (index > MAX_PRESETS_PER_ROOM) then
-			break
+	local presets = {}
+	for index = 1, MAX_PRESETS_PER_ROOM do
+		local prefix = 'PRESET_' .. tostring(index) .. '_'
+		local source = tonumber(params[prefix .. 'SOURCE'] or params[prefix .. 'SOURCE_ID'] or params['Preset ' .. tostring(index) .. ' Source'])
+		if (source and source > 0) then
+			presets[index] = {
+				name = Trim(params[prefix .. 'NAME'] or params['Preset ' .. tostring(index) .. ' Name'] or ('Preset ' .. tostring(index))),
+				source = source,
+				source_name = Trim(params[prefix .. 'SOURCE_NAME'] or '') ~= '' and Trim(params[prefix .. 'SOURCE_NAME']) or GetRoomName(source),
+			}
 		end
-		local normalized, err = NormalizeSourcePreset(preset, index, roomId)
-		if (not normalized) then
-			return false, 'Preset ' .. tostring(index) .. ': ' .. tostring(err)
-		end
-		table.insert(clean, normalized)
 	end
 
-	ROOM_PRESETS[RoomPresetKey(roomId)] = clean
-	PersistData = PersistData or {}
-	PersistData.SourcePresets = ROOM_PRESETS
+	local buttons = {}
+	for index = 1, MAX_CUSTOM_BUTTONS do
+		local prefix = 'BUTTON_' .. tostring(index) .. '_'
+		local name = Trim(params[prefix .. 'NAME'] or params['Button ' .. tostring(index) .. ' Name'] or '')
+		if (name ~= '') then
+			table.insert(buttons, {
+				index = index,
+				name = name,
+				binding_id = tonumber(params[prefix .. 'BINDING'] or params[prefix .. 'BINDING_ID']),
+			})
+		end
+	end
+
+	local roomName = Trim(params.ROOM_NAME or params.room_name or '')
+	if (roomName == '') then
+		roomName = GetRoomName(roomId)
+	end
+
+	ROOM_CHILDREN[childId] = {
+		device_id = childId,
+		child_name = Trim(params.DEVICE_NAME or params.device_name or params.CHILD_NAME or '') ~= '' and Trim(params.DEVICE_NAME or params.device_name or params.CHILD_NAME) or ('Room Control Room ' .. tostring(childId)),
+		binding_id = tonumber(params.ROOT_BINDING_ID or params.root_binding_id or params.BindingID),
+		room_id = roomId,
+		room_name = roomName,
+		enabled = BoolParam(params.ENABLED or params.enabled, true),
+		presets = presets,
+		buttons = buttons,
+		updated_at = os.time(),
+	}
+
+	RefreshLinkedRoomIndex()
+	UpdateLinkedRoomsStatus()
+	DebugLog('Registered linked room child ' .. tostring(childId) .. ' for room ' .. tostring(roomId))
 	return true, nil
+end
+
+local function UnregisterLinkedRoom(childId)
+	childId = tonumber(childId)
+	if (not childId) then
+		return
+	end
+	ROOM_CHILDREN[childId] = nil
+	LINKED_CHILDREN[childId] = nil
+	RefreshLinkedRoomIndex()
+	UpdateLinkedRoomsStatus()
+	DebugLog('Unregistered linked room child ' .. tostring(childId))
+end
+
+local function RequestLinkedRoomRegistration(childId, bindingId)
+	childId = tonumber(childId)
+	if (not childId or DRIVER_DESTROYING) then
+		return
+	end
+	local rootId = SafeCall(function()
+		return C4:GetDeviceID()
+	end)
+	SafeCall(function()
+		C4:SendToDevice(childId, 'REGISTER_WITH_ROOT', {
+			ROOT_DEVICE_ID = tostring(rootId or ''),
+			ROOT_BINDING_ID = tostring(bindingId or ''),
+		})
+	end)
+end
+
+local function RefreshLinkedRoomDrivers()
+	if (not C4 or not C4.GetBoundConsumerDevices) then
+		UpdateLinkedRoomsStatus()
+		return
+	end
+
+	local seen = {}
+	for bindingId = ROOT_LINK_BINDING_START, ROOT_LINK_BINDING_END do
+		local consumers = SafeCall(function()
+			return C4:GetBoundConsumerDevices(0, bindingId)
+		end)
+		if (type(consumers) == 'table') then
+			for childId, childName in pairs(consumers) do
+				local numericChildId = tonumber(childId)
+				if (numericChildId) then
+					seen[numericChildId] = true
+					LINKED_CHILDREN[numericChildId] = {binding_id = bindingId, name = childName}
+					RequestLinkedRoomRegistration(numericChildId, bindingId)
+				end
+			end
+		else
+			local childId = FirstBoundId(consumers)
+			if (childId) then
+				seen[childId] = true
+				LINKED_CHILDREN[childId] = {binding_id = bindingId}
+				RequestLinkedRoomRegistration(childId, bindingId)
+			end
+		end
+	end
+
+	for childId, _ in pairs(ROOM_CHILDREN or {}) do
+		if (not seen[tonumber(childId)]) then
+			UnregisterLinkedRoom(childId)
+		end
+	end
+
+	UpdateLinkedRoomsStatus()
+end
+
+local function LinkedRoomCatalog()
+	return SortedLinkedRooms()
+end
+
+local function ButtonCatalog()
+	local rooms = SortedLinkedRooms()
+	local buttons = {}
+	for _, room in ipairs(rooms) do
+		buttons[RoomPresetKey(room.id)] = room.buttons or {}
+	end
+	return {
+		ok = true,
+		rooms = rooms,
+		buttons = buttons,
+		max_buttons_per_room = MAX_CUSTOM_BUTTONS,
+	}
+end
+
+local function FindButtonForRoom(roomId, buttonValue)
+	local child = ROOM_CHILDREN_BY_ROOM[tonumber(roomId)]
+	if (not child) then
+		return nil, nil, 'No linked room driver for room ' .. tostring(roomId)
+	end
+	if (not child.enabled) then
+		return nil, child, 'Linked room driver is disabled for room ' .. tostring(roomId)
+	end
+
+	local index = tonumber(buttonValue)
+	if (index) then
+		for _, button in ipairs(child.buttons or {}) do
+			if (button.index == index) then
+				return button, child, nil
+			end
+		end
+	end
+
+	local normalized = Normalize(buttonValue)
+	for _, button in ipairs(child.buttons or {}) do
+		if (Normalize(button.name) == normalized) then
+			return button, child, nil
+		end
+	end
+	return nil, child, 'Button not found for room ' .. tostring(roomId)
+end
+
+local function TriggerLinkedButton(roomId, buttonValue, action)
+	local button, child, err = FindButtonForRoom(roomId, buttonValue)
+	if (not button) then
+		return false, err
+	end
+	SafeCall(function()
+		C4:SendToDevice(child.device_id, 'TRIGGER_CUSTOM_BUTTON', {
+			Button = button.name,
+			ButtonIndex = tostring(button.index),
+			Action = action or 'tap',
+		}, true)
+	end)
+	return true, {
+		room = tonumber(roomId),
+		name = child.room_name or GetRoomName(roomId),
+		child_device = child.device_id,
+		button = button.name,
+		index = button.index,
+		action = action or 'tap',
+	}
 end
 
 local function PresetsForRoom(roomId)
@@ -256,7 +433,7 @@ local function PresetCatalogForRoom(roomId)
 end
 
 local function PresetCatalog()
-	local rooms = GetRooms(true)
+	local rooms = LinkedRoomCatalog()
 	local presets = {}
 	local sources = {}
 	for _, room in ipairs(rooms) do
@@ -275,37 +452,12 @@ local function PresetCatalog()
 end
 
 local function HandlePresetSaveRequest(req)
-	local roomValue = RequestAnyValue(req, {'room', 'room_id', 'roomId'})
-	local body = req.bodyTable or req.form or {}
-	local saved = {}
-
-	if (roomValue ~= nil and roomValue ~= '') then
-		local roomIds, roomErr = ResolveRooms(roomValue)
-		if (not roomIds or #roomIds ~= 1) then
-			return 400, {ok = false, error = {code = 'room_error', message = roomErr or 'Specify exactly one room when saving presets'}}
-		end
-		local ok, err = SaveRoomSourcePresets(roomIds[1], body.presets or {})
-		if (not ok) then
-			return 400, {ok = false, error = {code = 'preset_error', message = err}}
-		end
-		table.insert(saved, roomIds[1])
-	elseif (type(body.presets) == 'table') then
-		for key, presets in pairs(body.presets) do
-			local roomId = tonumber(key)
-			local ok, err = SaveRoomSourcePresets(roomId, presets)
-			if (not ok) then
-				return 400, {ok = false, error = {code = 'preset_error', message = err}}
-			end
-			table.insert(saved, roomId)
-		end
-	else
-		return 400, {ok = false, error = {code = 'preset_error', message = 'Provide room and presets'}}
-	end
-
-	return 200, {
-		ok = true,
-		saved = saved,
-		presets = PresetCatalog().presets,
+	return 405, {
+		ok = false,
+		error = {
+			code = 'not_supported',
+			message = 'Preset configuration now lives on each linked Room Control Webhook Room driver.',
+		},
 	}
 end
 
@@ -316,10 +468,10 @@ local function FindPreset(roomId, presetValue)
 		return presets[index], index
 	end
 
-	local normalized = NormalizeCommand(presetValue)
+	local normalized = Normalize(presetValue)
 	for presetIndex = 1, MAX_PRESETS_PER_ROOM do
 		local preset = presets[presetIndex]
-		if (preset and NormalizeCommand(preset.name) == normalized) then
+		if (preset and Normalize(preset.name) == normalized) then
 			return preset, presetIndex
 		end
 	end
@@ -424,6 +576,39 @@ local function HandlePresetRunRequest(req)
 		end
 		table.insert(results, {room = roomId, preset = preset.name, index = presetIndex, source = preset.source, source_name = preset.source_name, sent = sentOrErr})
 	end
+
+	return 200, {
+		ok = true,
+		results = results,
+	}
+end
+
+local function HandleButtonRunRequest(req)
+	local roomValue = RequestAnyValue(req, {'rooms', 'room', 'room_id', 'roomId'})
+	local buttonValue = RequestAnyValue(req, {'button', 'button_id', 'buttonId', 'name'})
+	local action = RequestAnyValue(req, {'action', 'type', 'event'}) or 'tap'
+
+	if (Trim(buttonValue or '') == '') then
+		return 400, {ok = false, error = {code = 'button_error', message = 'Specify button by index or name'}}
+	end
+
+	local roomIds, roomErr = ResolveRooms(roomValue)
+	if (not roomIds) then
+		return 400, {ok = false, error = {code = 'room_error', message = roomErr}}
+	end
+
+	local results = {}
+	for _, roomId in ipairs(roomIds) do
+		local ok, sentOrErr = TriggerLinkedButton(roomId, buttonValue, action)
+		if (not ok) then
+			return 404, {ok = false, error = {code = 'button_not_found', message = sentOrErr}}
+		end
+		table.insert(results, sentOrErr)
+	end
+
+	local lastRequest = os.date('%Y-%m-%d %H:%M:%S') .. ' button ' .. tostring(buttonValue) .. ' -> ' .. tostring(#roomIds) .. ' room(s)'
+	UpdateDriverProperty('Last Request', lastRequest)
+	SetDriverVariable('Last Request', lastRequest)
 
 	return 200, {
 		ok = true,
