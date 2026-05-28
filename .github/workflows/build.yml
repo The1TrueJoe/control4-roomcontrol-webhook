@@ -65,14 +65,14 @@ jobs:
         with:
           projectDir: './driver'
           c4zproj: 'room_control_webhook.c4zproj'
-          outputDir: '.'
+          outputDir: '..'  # relative to projectDir → repo root
 
       - name: Package room child driver (room_control_webhook_room.c4z)
         uses: snap-one/drivers-driverpackager@v2-rc4
         with:
           projectDir: './room'
           c4zproj: 'room_control_webhook_room.c4zproj'
-          outputDir: '.'
+          outputDir: '..'  # relative to projectDir → repo root
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
